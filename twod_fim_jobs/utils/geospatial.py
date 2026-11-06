@@ -35,6 +35,7 @@ from shapely import (
     MultiPoint,
     Point,
     box,
+    get_parts,
 )
 from shapely.geometry.base import BaseGeometry
 from shapely.geometry import shape, mapping
@@ -198,6 +199,13 @@ def _intersection_points(geom: BaseGeometry) -> list[Point]:
         )
 
     return []
+
+
+def line_parts(geom: BaseGeometry) -> MultiLineString:
+    """Return only the line parts of a geometry, dropping points and polygons."""
+    return MultiLineString(
+        [g for g in get_parts(get_parts(geom)) if isinstance(g, LineString)]
+    )
 
 
 def _flatten_points(point_lists: Iterable[list[Point]]) -> list[Point]:
@@ -649,7 +657,8 @@ def compute_wse_contour(
         clip_geom = gpd.read_file(clip_poly)
         if not clip_geom.empty:
             clip_geom = clip_geom.geometry.iloc[0]
-            contour = contour.intersection(clip_geom)
+            # Touch points on the polygon edge make this a GeometryCollection.
+            contour = line_parts(contour.intersection(clip_geom))
 
     gdf = gpd.GeoDataFrame(
         {"wse": [wse_val]},

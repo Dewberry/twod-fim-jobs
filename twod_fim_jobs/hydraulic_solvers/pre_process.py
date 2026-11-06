@@ -9,7 +9,14 @@ import numpy as np
 import rasterio
 import rasterio.transform
 from affine import Affine
-from shapely import LineString, MultiLineString, MultiPolygon, Point, Polygon
+from shapely import (
+    GeometryCollection,
+    LineString,
+    MultiLineString,
+    MultiPolygon,
+    Point,
+    Polygon,
+)
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import linemerge
 
@@ -29,7 +36,12 @@ from twod_fim_jobs.models.solvers import (
     RunScenarioInputs,
     TransferBC,
 )
-from twod_fim_jobs.utils.geospatial import Raster, rasterize_geometry, tif_to_asc
+from twod_fim_jobs.utils.geospatial import (
+    Raster,
+    line_parts,
+    rasterize_geometry,
+    tif_to_asc,
+)
 from twod_fim_jobs.utils.storage import ASSET_CACHE
 
 logger = logging.getLogger(__name__)
@@ -431,6 +443,11 @@ def geometry_to_bc_points(
     domain: Domain,
 ) -> list[list[str | float]]:
     """Dispatch a geometry to the appropriate rasterization function and return BC point lists."""
+    # STLs published before clipping was fixed can be GeometryCollections.
+    if isinstance(geometry, GeometryCollection):
+        geometry = line_parts(geometry)
+        if geometry.is_empty:
+            return []
     if isinstance(geometry, Point):
         return [["P", geometry.x, geometry.y]]
     elif isinstance(geometry, MultiLineString):

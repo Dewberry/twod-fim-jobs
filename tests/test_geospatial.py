@@ -7,7 +7,45 @@ from rasterio.crs import CRS
 from rasterio.transform import from_bounds
 
 from twod_fim_jobs.exceptions import DatasetUnavailableError
-from twod_fim_jobs.utils.geospatial import _extract_raster, extract_raster
+from twod_fim_jobs.hydraulic_solvers.pre_process import geometry_to_bc_points
+from twod_fim_jobs.models.common import Domain, GridProperties
+from twod_fim_jobs.utils.geospatial import _extract_raster, extract_raster, line_parts
+from shapely import GeometryCollection, LineString, MultiLineString, Point, box
+
+
+def test_line_parts_drops_touch_points_from_clipped_contour():
+    """Clipping a contour can add stray touch points; only lines must survive."""
+    contour = MultiLineString([[(2, -1), (2, 5)], [(-1, 11), (0, 10), (1, 11)]])
+    clipped = contour.intersection(box(0, 0, 10, 10))
+    assert isinstance(clipped, GeometryCollection)
+
+    result = line_parts(clipped)
+
+    assert isinstance(result, MultiLineString)
+    assert list(result.geoms) == [LineString([(2, 0), (2, 5)])]
+
+
+def test_geometry_to_bc_points_accepts_geometry_collection():
+    """Already-published STLs may be GeometryCollections and must still rasterize."""
+    domain = Domain(
+        bbox=(0.0, 0.0, 10.0, 10.0), anchor=(5.0, 5.0), offsets=(5, 5, 5, 5)
+    )
+    grid = GridProperties(rows=10, cols=10)
+    transform = from_bounds(*domain.bbox, grid.cols, grid.rows)
+    line = LineString([(2.5, 0.5), (2.5, 4.5)])
+
+    expected = geometry_to_bc_points(line, grid, transform, domain)
+    result = geometry_to_bc_points(
+        GeometryCollection([line, Point(0, 10)]), grid, transform, domain
+    )
+
+    assert expected and result == expected
+    assert (
+        geometry_to_bc_points(
+            GeometryCollection([Point(0, 10)]), grid, transform, domain
+        )
+        == []
+    )
 
 
 # ---------------------------------------------------------------------------
